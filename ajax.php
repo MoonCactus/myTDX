@@ -360,8 +360,8 @@ elseif(isset($_GET['suggestTags']))
 	$begin = trim(_get('q'));
 	$limit = (int)_get('limit');
 	if($limit<1) $limit = 8;
-	$q = $db->dq("SELECT name,id FROM {$db->prefix}tags INNER JOIN {$db->prefix}tag2task ON id=tag_id WHERE list_id=$listId AND name LIKE ".
-					$db->quoteForLike('%s%%',$begin) ." GROUP BY tag_id ORDER BY name LIMIT $limit");
+	$q = $db->dq("SELECT name,id FROM {$db->prefix}tags INNER JOIN {$db->prefix}tag2task ON id=tag_id WHERE name LIKE ".
+					$db->quoteForLike('%s%%',$begin) ." GROUP BY tag_id ORDER BY name LIMIT $limit"); 
 	$s = '';
 	while($r = $q->fetch_row()) {
 		$s .= "$r[0]|$r[1]\n";

@@ -21,7 +21,7 @@ var tabLists = {
 	_alltasks: {},
 	clear: function(){
 		this._lists = {}; this._length = 0; this._order = [];
-		this._alltasks = { id:-1, showCompl:0, sort:3 }; 
+		this._alltasks = { id:-1, showCompl:0, sort:2 }; 
 	},
 	length: function(){ return this._length; },
 	exists: function(id){ if(this._lists[id] || id==-1) return true; else return false; },
@@ -318,7 +318,16 @@ var mytinytodo = window.mytinytodo = _mtt = {
 			dayNamesMin:_mtt.lang.daysMin, dayNames:_mtt.lang.daysLong, monthNamesShort:_mtt.lang.monthsLong
 		});
 
-		$("#edittags").autocomplete('ajax.php?suggestTags', {scroll: false, multiple: true, selectFirst:false, max:8, extraParams:{list:function(){ var taskId = document.getElementById('taskedit_form').id.value; return taskList[taskId].listId; }}});
+		$("#edittags").autocomplete('ajax.php?suggestTags', {scroll: false, multiple: true, selectFirst:false, max:8, extraParams:{list:function(){ var taskId = document.getElementById('taskedit_form').id.value; 
+		if (taskId)
+	              return taskList[taskId].listId;
+		else
+		      return -1; //will be the case during adding a new task
+		}}});
+
+
+
+
 
 		$('#taskedit_form').find('select,input,textarea').bind('change keypress', function(){
 			flag.editFormChanged = true;
