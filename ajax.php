@@ -100,9 +100,15 @@ elseif(isset($_GET['loadTasks']))
 			}
 		}
 
+		// In the "All Tasks" view ($listId == -1) there is no single list, so
+		// tag2task must not be restricted by list_id; the main query above already
+		// restricts tasks to valid lists. Task ids are globally unique, so matching
+		// by task_id without a list restriction is correct.
+		$tagListCond = ($listId == -1) ? '' : " AND list_id=$listId ";
+
 		if(sizeof($tagIds) > 1) {
-			$inner .= "INNER JOIN (SELECT task_id, COUNT(tag_id) AS c FROM {$db->prefix}tag2task WHERE list_id=$listId AND tag_id IN (".
-						implode(',',$tagIds). ") GROUP BY task_id) AS t2t ON id=t2t.task_id";
+			$inner .= "INNER JOIN (SELECT task_id, COUNT(tag_id) AS c FROM {$db->prefix}tag2task WHERE tag_id IN (".
+						implode(',',$tagIds). ")$tagListCond GROUP BY task_id) AS t2t ON id=t2t.task_id";
 			$sqlWhere .= " AND c=". sizeof($tagIds); //overwrite sqlWhere!
 		}
 		elseif($tagIds) {
@@ -111,8 +117,8 @@ elseif(isset($_GET['loadTasks']))
 		}
 		
 		if($tagExIds) {
-			$sqlWhere .= " AND id NOT IN (SELECT DISTINCT task_id FROM {$db->prefix}tag2task WHERE list_id=$listId AND tag_id IN (".
-						implode(',',$tagExIds). "))"; //DISTINCT ?
+			$sqlWhere .= " AND id NOT IN (SELECT DISTINCT task_id FROM {$db->prefix}tag2task WHERE tag_id IN (".
+						implode(',',$tagExIds). ")$tagListCond)"; //DISTINCT ?
 		}
 	}
 
