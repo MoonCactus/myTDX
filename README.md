@@ -1,5 +1,39 @@
 **myTDX** (my tiny todo extended)
 
+** Use following nginx config file **
+```
+server {
+        listen 4001 default_server;
+
+        root /srv/http/myTDX;
+        server_name _;
+        autoindex off;
+
+        proxy_intercept_errors on;
+        index myTDX/index.php index.php index.html index.htm;
+
+# deny access to hidden files and for instance Git directories
+	location ~ /\.(?!well-known).* {
+	    deny all;
+	        access_log off;
+		    log_not_found off;
+}
+
+
+        location ~ \.php$ {
+                include fastcgi.conf;
+                fastcgi_intercept_errors on;
+                fastcgi_pass  127.0.0.1:9000;
+                fastcgi_param SERVER_NAME \$host;
+        }
+
+        location ~ /\.ht {
+                deny all;
+        }
+}
+```
+
+
 As the name suggests, this project is heavily based on an old but very well done ajax todolist
 written by maxpozdeev/mytinytodo (http://www.mytinytodo.net/). It also works quite well on mobile phones.
 The older project was resumed years after being frozen, and now the two variants have diverged significantly.

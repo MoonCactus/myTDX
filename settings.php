@@ -31,6 +31,24 @@ if(isset($_POST['save']))
 	
 	if(isset($_POST['password']) && $_POST['password'] != '') Config::set('password', $_POST['password']);
 	elseif(!_post('allowpassword')) Config::set('password', '');
+	
+	// Handle 2FA settings
+	if(isset($_POST['enable_2fa']) && _post('enable_2fa') == '1') {
+		Config::set('totp_enabled', 1);
+		// Generate new secret if needed
+		if(_post('totp_secret') == '' && !isset($_POST['generate_2fa'])) {
+			require_once(MTTPATH. 'class.totp.php');
+			Config::set('totp_secret', TOTP::generateSecret());
+		}
+	} elseif(isset($_POST['enable_2fa']) && _post('enable_2fa') == '0') {
+		Config::set('totp_enabled', 0);
+	}
+	
+	// Allow manual secret entry for advanced users
+	if(isset($_POST['totp_secret']) && $_POST['totp_secret'] != '') {
+		Config::set('totp_secret', trim($_POST['totp_secret']));
+	}
+	
 	Config::set('smartsyntax', (int)_post('smartsyntax'));
 	Config::set('markdown', (int)_post('markdown'));
 	// Do not set invalid timezone
@@ -175,6 +193,29 @@ header('Content-type:text/html; charset=utf-8');
 </tr>
 
 <tr>
+<th>Two-Factor Authentication (2FA):<br/><span class="descr">Add TOTP-based 2FA for enhanced security</span></th>
+<td>
+<?php
+	$totp_enabled = (int)_c('totp_enabled');
+	$totp_secret = _c('totp_secret');
+	$hasSecret = $totp_secret != '';
+?>
+<label><input type="radio" name="enable_2fa" value="1" <?php if($totp_enabled) echo 'checked="checked"'; ?> /> Enable 2FA</label> <br/>
+<label><input type="radio" name="enable_2fa" value="0" <?php if(!$totp_enabled) echo 'checked="checked"'; ?> /> Disable 2FA</label> <br/>
+<?php if($hasSecret): ?>
+<span style="color:green;">2FA is configured</span>
+<?php else: ?>
+<span style="color:orange;">2FA not configured</span>
+<?php endif; ?>
+<input type="hidden" name="totp_secret" id="totp_secret" value="<?php echo htmlspecialchars($totp_secret); ?>" />
+<button type="button" id="btn_generate_2fa" <?php if($totp_enabled && !$hasSecret) echo 'style="display:none;"'; ?>>Generate New Secret</button>
+<button type="button" id="btn_show_qr" <?php if(!$hasSecret) echo 'style="display:none;"'; ?>>Show QR Code</button>
+<div id="2fa_qr_container" style="display:none; margin-top:10px;"></div>
+<div id="2fa_code" style="display:none; margin-top:10px; font-family:monospace; font-size:18px; letter-spacing:3px;"></div>
+</td>
+</tr>
+
+<tr>
 <th><?php _e('set_smartsyntax');?>:<br/><span class="descr"><?php _e('set_smartsyntax_descr');?></span></th>
 <td>
  <label><input type="radio" name="smartsyntax" value="1" <?php if(_c('smartsyntax')) echo 'checked="checked"'; ?> /><?php _e('set_enabled');?></label> <br/>
@@ -297,3 +338,56 @@ header('Content-type:text/html; charset=utf-8');
 </table>
 
 </form>
+
+<script type="text/javascript">
+//<![CDATA[
+$(document).ready(function() {
+    // 2FA management
+    var totpSecret = $('#totp_secret').val();
+
+    // Generate new 2FA secret
+    $('#btn_generate_2fa').click(function() {
+        $.get('ajax.php?generate_2fa_secret', function(data) {
+            if(data.error) {
+                alert(data.error);
+                return;
+            }
+            $('#totp_secret').val(data.secret);
+            var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(data.uri);
+            $('#2fa_qr_container').html('<img src="' + qrUrl + '" alt="2FA QR Code" style="display:block; margin:10px auto;" />');
+            $('#2fa_code').text(data.secret.match(/.{1,4}/g).join(' '));
+            $('#2fa_code').show();
+            $('#2fa_qr_container').show();
+            $('#btn_generate_2fa').hide();
+            $('#btn_show_qr').show();
+        });
+    });
+
+    // Show QR code (in case it was hidden)
+    $('#btn_show_qr').click(function() {
+        var secret = $('#totp_secret').val();
+        if(!secret) {
+            alert('No secret configured. Generate one first.');
+            return;
+        }
+        var uri = 'otpauth://totp/myTDX:user?secret=' + secret.replace(/=/g,'') + '&issuer=myTDX';
+        var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(uri);
+        $('#2fa_qr_container').html('<img src="' + qrUrl + '" alt="2FA QR Code" style="display:block; margin:10px auto;" />');
+        $('#2fa_code').text(secret.match(/.{1,4}/g).join(' '));
+        $('#2fa_qr_container').show();
+        $('#2fa_code').show();
+        $(this).hide();
+    });
+
+    // Enable/disable 2FA radio buttons
+    $('input[name="enable_2fa"]').change(function() {
+        var enabled = $(this).val() == '1';
+        if(enabled && !$('#totp_secret').val()) {
+            if(confirm('You need a 2FA secret first. Generate one now?')) {
+                $('#btn_generate_2fa').click();
+            }
+        }
+    });
+});
+//]]>
+</script>

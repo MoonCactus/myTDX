@@ -100,9 +100,15 @@ elseif(isset($_GET['loadTasks']))
 			}
 		}
 
+		// In the "All Tasks" view ($listId == -1) there is no single list, so
+		// tag2task must not be restricted by list_id; the main query above already
+		// restricts tasks to valid lists. Task ids are globally unique, so matching
+		// by task_id without a list restriction is correct.
+		$tagListCond = ($listId == -1) ? '' : " AND list_id=$listId ";
+
 		if(sizeof($tagIds) > 1) {
-			$inner .= "INNER JOIN (SELECT task_id, COUNT(tag_id) AS c FROM {$db->prefix}tag2task WHERE list_id=$listId AND tag_id IN (".
-						implode(',',$tagIds). ") GROUP BY task_id) AS t2t ON id=t2t.task_id";
+			$inner .= "INNER JOIN (SELECT task_id, COUNT(tag_id) AS c FROM {$db->prefix}tag2task WHERE tag_id IN (".
+						implode(',',$tagIds). ")$tagListCond GROUP BY task_id) AS t2t ON id=t2t.task_id";
 			$sqlWhere .= " AND c=". sizeof($tagIds); //overwrite sqlWhere!
 		}
 		elseif($tagIds) {
@@ -111,8 +117,8 @@ elseif(isset($_GET['loadTasks']))
 		}
 		
 		if($tagExIds) {
-			$sqlWhere .= " AND id NOT IN (SELECT DISTINCT task_id FROM {$db->prefix}tag2task WHERE list_id=$listId AND tag_id IN (".
-						implode(',',$tagExIds). "))"; //DISTINCT ?
+			$sqlWhere .= " AND id NOT IN (SELECT DISTINCT task_id FROM {$db->prefix}tag2task WHERE tag_id IN (".
+						implode(',',$tagExIds). ")$tagListCond)"; //DISTINCT ?
 		}
 	}
 
@@ -334,22 +340,51 @@ elseif(isset($_GET['changeOrder']))
 }
 elseif(isset($_POST['login']))
 {
-	$t = array('logged' => 0);
+	$t = array('logged' => 0, 'requires_2fa' => 0);
 	if(!$needAuth) {
 		$t['disabled'] = 1;
 		jsonExit($t);
 	}
 	$password = _post('password');
 	if(in_array($password,explode(' ',Config::get('password')))) {
-		$t['logged'] = 1;
 		session_regenerate_id(1);
 		$_SESSION['logged'] = 1;
+		
+		// Check if 2FA is required
+		if(is_2fa_required()) {
+			$t['requires_2fa'] = 1;
+			$_SESSION['2fa_pending'] = true;
+			$_SESSION['2fa_verified'] = false;
+		} else {
+			$t['logged'] = 1;
+			$_SESSION['2fa_verified'] = true;
+		}
+	}
+	jsonExit($t);
+}
+elseif(isset($_POST['verify_2fa']))
+{
+	$t = array('verified' => 0, 'logged' => 0);
+	if(!is_2fa_pending()) {
+		jsonExit($t);
+	}
+	
+	$code = _post('code');
+	$secret = Config::get('totp_secret');
+	
+	if(TOTP::verify($secret, $code)) {
+		$_SESSION['2fa_verified'] = true;
+		$_SESSION['2fa_pending'] = false;
+		$t['verified'] = 1;
+		$t['logged'] = 1;
 	}
 	jsonExit($t);
 }
 elseif(isset($_POST['logout']))
 {
 	unset($_SESSION['logged']);
+	unset($_SESSION['2fa_pending']);
+	unset($_SESSION['2fa_verified']);
 	$t = array('logged' => 0);
 	jsonExit($t);
 }
@@ -360,8 +395,8 @@ elseif(isset($_GET['suggestTags']))
 	$begin = trim(_get('q'));
 	$limit = (int)_get('limit');
 	if($limit<1) $limit = 8;
-	$q = $db->dq("SELECT name,id FROM {$db->prefix}tags INNER JOIN {$db->prefix}tag2task ON id=tag_id WHERE list_id=$listId AND name LIKE ".
-					$db->quoteForLike('%s%%',$begin) ." GROUP BY tag_id ORDER BY name LIMIT $limit");
+	$q = $db->dq("SELECT name,id FROM {$db->prefix}tags INNER JOIN {$db->prefix}tag2task ON id=tag_id WHERE name LIKE ".
+					$db->quoteForLike('%s%%',$begin) ." GROUP BY tag_id ORDER BY name LIMIT $limit"); 
 	$s = '';
 	while($r = $q->fetch_row()) {
 		$s .= "$r[0]|$r[1]\n";
@@ -929,4 +964,36 @@ function getUserListsSimple()
 	return $a;
 }
 
+# 2FA Management AJAX endpoints
+if(isset($_GET['generate_2fa_secret']))
+{
+	if($needAuth && !is_logged()) {
+		jsonExit(array('error' => 'Not authenticated'));
+	}
+	require_once(MTTPATH. 'class.totp.php');
+	$secret = TOTP::generateSecret();
+	$uri = TOTP::getProvisioningUri('myTDX', 'user', $secret);
+	jsonExit(array('secret' => $secret, 'uri' => $uri));
+}
+
+if(isset($_POST['save_2fa_settings']))
+{
+	if($needAuth && !is_logged()) {
+		jsonExit(array('error' => 'Not authenticated'));
+	}
+	$enable = (int)_post('totp_enabled');
+	$secret = trim(_post('totp_secret'));
+	
+	if($enable && $secret == '') {
+		jsonExit(array('error' => 'Secret is required when enabling 2FA'));
+	}
+	
+	Config::set('totp_enabled', $enable);
+	Config::set('totp_secret', $secret);
+	Config::save();
+	
+	jsonExit(array('saved' => 1, 'totp_enabled' => $enable));
+}
+
 ?>
+

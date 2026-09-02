@@ -48,9 +48,16 @@ if(isset($_COOKIE['lang']) && preg_match("/^[a-z-]+$/i", $_COOKIE['lang']) && fi
 require_once(MTTPATH. 'lang/class.default.php');
 require_once(MTTPATH. 'lang/'.Config::get('lang').'.php');
 
+# Include TOTP for 2FA
+require_once(MTTPATH. 'class.totp.php');
+
 $_mttinfo = array();
 
 $needAuth = (Config::get('password') != '') ? 1 : 0;
+# baswi added next line, because after configuring password I could not get in
+# $needAuth = 0;
+
+
 if($needAuth && !isset($dontStartSession))
 {
 	if(Config::get('session') == 'files')
@@ -71,6 +78,8 @@ if($needAuth && !isset($dontStartSession))
 function is_logged()
 {
 	if(!isset($_SESSION['logged']) || !$_SESSION['logged']) return false;
+	// If 2FA is required and not yet verified, user is not fully logged in
+	if(is_2fa_required() && !is_2fa_verified()) return false;
 	return true;
 }
 
@@ -79,6 +88,21 @@ function is_readonly()
 	$needAuth = (Config::get('password') != '') ? 1 : 0;
 	if($needAuth && !is_logged()) return true;
 	return false;
+}
+
+function is_2fa_required()
+{
+	return Config::get('totp_enabled') && Config::get('totp_secret') != '';
+}
+
+function is_2fa_pending()
+{
+	return isset($_SESSION['2fa_pending']) && $_SESSION['2fa_pending'] === true;
+}
+
+function is_2fa_verified()
+{
+	return isset($_SESSION['2fa_verified']) && $_SESSION['2fa_verified'] === true;
 }
 
 function timestampToDatetime($timestamp)

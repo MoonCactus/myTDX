@@ -69,6 +69,8 @@ class Config
 		'title' => array('default'=>'', 'type'=>'s'),
 		'lang' => array('default'=>'en', 'type'=>'s'),
 		'password' => array('default'=>'', 'type'=>'s'),
+		'totp_enabled' => array('default'=>0, 'type'=>'i'),
+		'totp_secret' => array('default'=>'', 'type'=>'s'),
 		'smartsyntax' => array('default'=>1, 'type'=>'i'),
 		'markdown' => array('default'=>1, 'type'=>'i'),
 		'timezone' => array('default'=>'UTC', 'type'=>'s'),
